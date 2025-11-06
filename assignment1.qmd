@@ -1,0 +1,125 @@
+---
+title: "Where Does Chicago's Queer Population Live?"
+subtitle: "Mapping LGBTQ+ Chicagoans by Census Tracts"
+author: Jake Cox
+email: jcox41@depaul.edu
+date: 11/5/2025
+format: 
+  html:
+    warning: false
+    error: false
+    code-tools: false
+    code-fold: false
+    eval: false
+    echo: true
+    theme: flatly
+    reference-location: document
+    fontsize: 0.9em
+    interlinespace: -0.75em
+    embed-resources: true
+    number-sections: false
+    number-depth: 1
+# bibliography: references.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| label: install R packages
+#| eval: true
+#| echo: false
+
+library(censusapi) # retrieving census attribute data
+library(tigris) # retrieving census geometries
+library(sf) # manipulating geometry data
+library(leaflet) # making interactive maps
+library(leaflet.extras) # extra map controls
+library(dplyr) # data wrangling, pip format
+library(tidyverse) # data wrangling
+library(tidycensus) # get tidycensus
+library(ggplot2) # needed for bivariate mapping
+library(cowplot) # needed to combine bivariate map with legend
+library(RColorBrewer) # standard color palettes
+library(data.table) # table manipulation and formatting
+library(DT) # interactive tables
+
+```
+
+```{r}
+#| eval: false
+#| echo: false
+
+# census_tract <- st_read("data/tracts.geojson")
+plot(census_tract["geometry"])
+household_data <- read.csv("data/census.csv")
+household_data <- household_data %>%
+  mutate(percent_households = total.same.sex / total)
+household_data <- household_data %>%
+  mutate(percent_households = 100 * total.same.sex / total)
+cleaned_household <- household_data %>% 
+  select(Census.Tract , percent_households)
+census_tract <- census_tract %>% 
+  rename(Census.Tract = NAMELSAD)
+census_tract <- census_tract %>% 
+  left_join(cleaned_household, by = "Census.Tract")
+census_tract <- st_transform(census_tract, 4326)
+```
+
+
+# Purpose
+
+The purpose of this map is to visualize the concentration of LGBT+ Chicagoans by showing where same-sex households make up a larger share of all couple households. This measure provides a proxy for understanding patterns of LGBT+ residency across Chicago’s neighborhoods and how those patterns vary geographically.
+
+# Background
+
+Chicago has long been home to diverse LGBT+ communities, with neighborhoods like Lakeview, Andersonville and Northalsted being well known enclaves for this population. However, the distribution of LGBT+ residents extends far beyond these areas. By mapping these households as a share of all couple households, we can better understand how the city’s queer population has both concentrated and dispersed over time in response to shifting economic and social factors.
+
+# Methodology and Data Sources
+
+Data for this map comes from the U.S. Census Bureau’s 2022 American Community Survey (ACS) 5-Year Estimates. Using [ACS table B09019](https://data.census.gov/table/ACSDT5Y2023.B09019?g=860XX00US06419&q=Families+and+Living+Arrangements) detailing household composition by couple type, including same-sex married, same-sex unmarried, opposite-sex married, and opposite-sex unmarried, I calculated the percentage of same-sex households out of all couple households for each census tract in Chicago. These tract-level percentages represent the share of households likely identifying as LGBT+. The resulting dataset was joined to geographic boundaries from the [U.S. Census TIGER/Line shapefiles](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html) to produce the final spatial visualization.
+
+Using these geographies with a percentage attached I was able to create a choropleth map showing the value differentiation across the city. 
+
+
+# Map
+
+```{r}
+#| label: fig-figurelabel
+#| fig-cap: "Same-Sex Households as a Share of All Couple Households (2020)"
+#| eval: true
+#| echo: false
+
+load(file="assignment1_data.RData")
+
+pal <- colorNumeric(
+  palette = "YlGnBu",
+  domain = census_tract$percent_households,
+  na.color = "transparent"
+)
+
+leaflet(census_tract) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -87.6298, lat = 41.8781, zoom = 10) %>%
+  addPolygons(
+    fillColor = ~pal(percent_households),
+    weight = 0.7,
+    color = "black",
+    fillOpacity = 0.7,
+    opacity = 1,
+    popup = ~paste0(
+      "<b>Census Tract: </b>", Census.Tract, "<br>",
+      "<b>Percent of Households: </b>", sprintf("%.2f%%", percent_households)
+    )
+  ) %>%
+  addLegend(
+    pal = pal,
+    values = ~percent_households,
+    title = "Percent of Households",
+    position = "bottomright",
+    labFormat = labelFormat(suffix = "%", digits = 2)
+  ) %>%
+  addControl(
+    html = "<span style='font-size:12px; color:#555;'>Map by Jake Cox | Data: U.S. Census Bureau</span>",
+    position = "bottomleft"
+  )
+```
